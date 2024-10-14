@@ -1,0 +1,897 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <sys/stat.h>//Linux
+#include <direct.h>//Windows
+#include <filesystem>
+#include <cstdio>
+#include <map>//удалить
+#pragma warning(disable : 4996)//Windows
+
+//#include "HashTable.h"
+#include "utils.h"
+
+using namespace std;
+
+struct Configuration {
+	string name;
+	int32_t tuples_limits = 1;
+};
+
+Configuration configuration;
+
+
+template <typename T>
+struct Array {
+private:
+	T* arr;
+	int32_t capacity, currentSize;
+public:
+	Array() {
+		arr = new T[1];
+		capacity = 1;
+		currentSize = 0;
+	}
+
+	//~Array() { delete[] arr; }
+
+	void push_back(T value) {
+		if (capacity == currentSize) {
+			T* temp = new T[2 * capacity];
+			for (int32_t i = 0; i < capacity; i++) temp[i] = arr[i];
+			delete[] arr;
+			capacity *= 2;
+			arr = temp;
+		}
+		arr[currentSize] = value;
+		currentSize++;
+	}
+
+	void insert(int32_t index, T value) {
+		if (index == currentSize) {
+			push_back(value);
+			return;
+		}
+		if (capacity == currentSize) {
+			T* temp = new T[2 * capacity];
+			for (int32_t i = 0; i < capacity; i++) temp[i] = arr[i];
+			delete[] arr;
+			capacity *= 2;
+			arr = temp;
+		}
+		T* tempArray = new T[capacity];
+		if (index > currentSize) return;
+		for (int32_t i = 0, j = 0; i < currentSize; i++, j++) {
+			if (i == index) {
+				tempArray[i] = value;
+				if (index + 1 != capacity) {
+					j++;
+					tempArray[j] = arr[i];
+				}
+			}
+			else tempArray[j] = arr[i];
+		}
+		delete[] arr;
+		arr = tempArray;
+		currentSize++;
+	}
+
+	void erase(int32_t index) {
+		if (index >= currentSize) return;
+		T* temp = new T[capacity];
+		for (int32_t i = 0, j = 0; i < currentSize; i++, j++) {
+			if (i == index) {
+				i++;
+			}
+			temp[j] = arr[i];
+		}
+		delete[] arr;
+		arr = temp;
+		currentSize--;
+	}
+
+	int32_t size() {
+		return currentSize;
+	}
+
+	void print() {
+		for (int32_t i = 0; i < currentSize; i++) {
+			std::cout << arr[i] << " ";
+		}
+		std::cout << std::endl;
+	}
+
+	T& operator[](int32_t index) {
+		return arr[index];
+	}
+};
+
+template <typename T>
+struct Hash {
+private:
+	Array<T>* arr;
+	int32_t amountOfItems, capacity;
+
+	int32_t hashFunction(std::string key) {
+		const int32_t k = 41, mod = 1e9 + 9;
+		int64_t h = 0, m = 1;
+		for (unsigned char character : key) {
+			int32_t x = character - 'a' + 1;
+			h = (h + m * x) % mod;
+			m = (m * k) % mod;
+		}
+		return h % capacity;
+	}
+
+public:
+	Hash() {
+		capacity = 1000;
+		amountOfItems = 0;
+		arr = new Array<T>[capacity];
+	}
+
+	Array<T> operator()(std::string key) {
+		int32_t index = hashFunction(key);
+		return arr[index];
+	}
+
+	void HSET(std::string key, T value) {
+		int32_t index = hashFunction(key);
+		arr[index].push_back(value);
+		amountOfItems++;
+	}
+
+	void HDEL(std::string key) {
+		int32_t index = hashFunction(key);
+		arr[index].erase(0);//неправильно
+		amountOfItems--;
+	}
+
+	/*T HGET(std::string key) {
+		int32_t index = hashFunction(key);
+		HList<T> tempList = arr[index];
+		return tempList.get(key);
+	}*/
+
+	void print(int32_t MaxPrimaryKey) {
+		for (int32_t i = 1; i < MaxPrimaryKey; i++) {
+			int32_t index = hashFunction(std::to_string(i));
+			arr[index].print();
+		}
+		std::cout << std::endl;
+	}
+};
+
+void checkTheFileOpening(ifstream& file) {
+	if (!file.is_open()) throw runtime_error("Error open file");
+}
+
+void checkTheFileOpening(ofstream& file) {
+	if (!file.is_open()) throw runtime_error("Error open file");
+}
+
+void chekTheFileUnlock(const string& tableName) {
+	ifstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux изменить
+	checkTheFileOpening(fileLockTable);
+	int32_t statusFile;
+	fileLockTable >> statusFile;
+	if (statusFile == 1) throw runtime_error("Table locking");
+	fileLockTable.close();
+}
+
+void createMainDirectory(string& name) {
+	if (mkdir(name.c_str()) == -1) throw runtime_error("Error create a main directory");
+}
+
+string readName(ifstream& file) {
+	unsigned char letter;
+	string name = "";
+	file >> letter;
+	if (letter == '"') file >> letter;
+	while (letter != '"') {
+		name += letter;
+		file >> letter;
+	}
+	createMainDirectory(name);
+	return name;
+}
+
+int32_t readTuplesLimits(ifstream& file) {
+	char figure;
+	string number;
+	file >> figure;
+	while (figure != ',') {
+		number += figure;
+		file >> figure;
+	}
+	return stoi(number);
+}
+
+string readNameTable(ifstream& file, unsigned char& letter) {
+	file >> letter;
+	string name;
+	for (int32_t countLetter = 0; letter != '"'; countLetter++) {
+		name += letter;
+		file >> letter;
+		if (countLetter > 25) throw runtime_error("incorrect table name");
+	}
+	return name;
+}
+
+void WritingToFileNamesColumns(ifstream& file, ofstream& fileTable) {
+	unsigned char letter;
+	file >> letter;
+	while (true) {//Вынести в отдельную
+		string name;
+		while (letter != '"') {
+			name += letter;
+			file >> letter;
+		}
+		fileTable << name;
+		file >> letter;
+		if (letter == ',') {
+			file >> letter;
+			file >> letter;
+			fileTable << ", ";
+		}
+		else break;
+	}
+}
+
+void readNamesColumns(ifstream& file, ofstream& fileTable) {
+	unsigned char letter;
+	file >> letter;
+	if (letter == '"') {
+		file >> letter;
+		while (true) {//Вынести в отдельную
+			string name;
+			while (letter != '"') {
+				name += letter;
+				file >> letter;
+			}
+			fileTable << name;
+			file >> letter;
+			if (letter == ',') {
+				file >> letter;
+				file >> letter;
+				fileTable << ", ";
+			}
+			else break;
+		}
+	}
+}
+
+void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& letter) {//Можно ли передавать без letter?Вроде да
+	if (letter == '"') file >> letter;
+	if (letter == ':') file >> letter;
+	else throw runtime_error("Incorrect data in the \"structure\"");
+	readNamesColumns(file, fileTable);
+}
+
+void createFileLockTable(const string& path, const string& nameTable) {
+	ofstream fileLockTable(path + '\\' + nameTable + "_lock");//В  линуксе поменять
+	if (fileLockTable.is_open()) fileLockTable << 0;
+	else throw runtime_error("Error create file <Table name>_lock");
+	fileLockTable.close();
+}
+
+void createFileForPrimaryKey(const string& path, const string& nameTable) {
+	ofstream filePrimaryKey(path + '\\' + nameTable + "_pk_sequence");
+	if (filePrimaryKey.is_open()) filePrimaryKey << 1;
+	else throw runtime_error("Error create file <Table name>_pk_sequence");
+	filePrimaryKey.close();
+}
+
+void createFilesTable(const string& path, const string& nameTable) {
+	if (mkdir(path.c_str()) == -1) throw runtime_error("Error create a directory");
+	createFileLockTable(path, nameTable);
+	createFileForPrimaryKey(path, nameTable);
+}
+
+void readStructure(ifstream& file) {
+	unsigned char letter;
+	file >> letter;
+	if (letter == '{') file >> letter;
+	if (letter == '"') {
+		for (int32_t i = 1; true; i++) {
+			string nameTable = readNameTable(file, letter);//В линукс изменить
+			string path = configuration.name + '\\' + nameTable;
+			createFilesTable(path, nameTable);
+			ofstream fileTable(path + '\\' + "1" + ".csv");
+			if (fileTable.is_open()) {
+				readСolumnsOfTable(file, fileTable, letter);
+			}
+			else throw runtime_error("Error create file");
+			file >> letter;
+			if (letter == ',') file >> letter;
+			else break;
+			fileTable.close();
+		}
+	}
+}
+
+void readingConfiguration(ifstream& file) {
+	string str;//Изменить имя
+	while (file >> str) {
+		if (str == "\"name\":") configuration.name = readName(file);
+		if (str == "\"tuples_limit\":") configuration.tuples_limits = readTuplesLimits(file);
+		if (str == "\"structure\":") readStructure(file);
+	}
+}
+
+void createDataBase() {
+	ifstream file("schema.json");
+	if (file.is_open()) {
+		readingConfiguration(file);
+	}
+	else throw runtime_error("Error file open");
+	file.close();
+}
+
+bool checkingTableName(string& tableName) {
+	struct stat md;
+	string dir = configuration.name + "\\" + tableName;
+	if (stat(dir.c_str(), &md) == 0) return true;
+	else throw runtime_error("Invalid table name");
+}
+
+void lockingTheTable(const string& tableName) {
+	ofstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux edit
+	checkTheFileOpening(fileLockTable);
+	fileLockTable << 1;
+	fileLockTable.close();
+}
+
+void unlockingTheTable(const string& tableName) {
+	ofstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux edit
+	checkTheFileOpening(fileLockTable);
+	fileLockTable << 0;
+	fileLockTable.close();
+}
+
+int32_t amountOfFilesInDir(const string& tableName) {
+	auto dirIter = filesystem::directory_iterator(configuration.name + '\\' + tableName);
+	int32_t fileCount = count_if(begin(dirIter), end(dirIter), [](auto& entry) { return entry.is_regular_file(); });
+	return fileCount;
+}
+
+void updateFilePrimaryKey(const string& tableName, int32_t primaryKey) {
+	ofstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	checkTheFileOpening(filePrimaryKey);
+	primaryKey++;
+	filePrimaryKey << primaryKey;
+	filePrimaryKey.close();
+}
+
+int32_t readPrimaryKey(const string& tableName) {
+	ifstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	int32_t primaryKey;
+	checkTheFileOpening(filePrimaryKey);
+	filePrimaryKey >> primaryKey;
+	filePrimaryKey.close();
+	return primaryKey;
+}
+
+int32_t checkingTuplesLimit(const string& tableName) {
+	int32_t primaryKey = readPrimaryKey(tableName);
+	int32_t amountOfTableFiles = amountOfFilesInDir(tableName) - 2;
+	if (primaryKey / configuration.tuples_limits + 1 != amountOfTableFiles) amountOfTableFiles++;
+	updateFilePrimaryKey(tableName, primaryKey);
+	return amountOfTableFiles;
+}
+
+Vector<string> addValuesToVector(unsigned char& character) {
+	Vector<string> valuesForNewRow;
+	string value;
+	for (int32_t i = 0; character != ')'; i++) {
+		cin >> character;
+		if (i == 0 or character == '\'') continue;
+		if (character == ',') {
+			valuesForNewRow.push(value);
+			i = 0;
+			value = "";
+			cin >> character;
+			cin >> character;
+		}
+		if (character == ')') valuesForNewRow.push(value);
+		value += character;
+	}
+	return valuesForNewRow;
+}
+
+void writeRowToFile(const string& nameOfTableFile, Vector<string>& valuesForNewRow) {
+	ofstream tableFile(configuration.name + '\\' + nameOfTableFile, ios_base::app);//поменять / в линукс
+	checkTheFileOpening(tableFile);
+	for (int32_t i = 0; i != valuesForNewRow.size(); i++) {
+		if (i == 0) tableFile << '\n' << valuesForNewRow[i] << ", ";
+		else if (i + 1 != valuesForNewRow.size()) tableFile << valuesForNewRow[i] << ", ";
+		else tableFile << valuesForNewRow[i];
+	}
+	tableFile.close();
+}
+
+void readInputValues(const string& nameOfTableFile) {
+	Vector<string> valuesForNewRow;
+	unsigned char character;
+	cin >> character;
+	if (character == '(') {
+		valuesForNewRow = addValuesToVector(character);
+	}
+	writeRowToFile(nameOfTableFile, valuesForNewRow);
+}
+
+string readingTableName(string& inputCommand) {
+	cin >> inputCommand;
+	string tableName;
+	if (checkingTableName(inputCommand)) tableName = inputCommand;
+	return tableName;
+}
+
+void insertingIntoTable(string& inputCommand) {
+	string tableName = readingTableName(inputCommand);
+	chekTheFileUnlock(tableName);
+	lockingTheTable(tableName);
+	cin >> inputCommand;
+	int32_t amountOfTableFiles = checkingTuplesLimit(tableName);
+	string nameOfTableFile = tableName + '\\' + to_string(amountOfTableFiles) + ".csv";//Поменять на Linux
+	if (inputCommand == "VALUES") readInputValues(nameOfTableFile);
+	unlockingTheTable(tableName);
+}
+
+void commandInsertInto(string& inputCommand) {
+	cin >> inputCommand;
+	if (inputCommand == "INTO") insertingIntoTable(inputCommand);
+	else throw runtime_error("Incorrect command");
+}
+
+Vector<string> readLogicalExpression(string str) {
+	Vector<string> logicalExpression;
+	string element;
+	for (char character : str) {
+		if (character == ' ' and element != "") {
+			logicalExpression.push(element);
+			element = "";
+		}
+		else if (character != ' ') element += character;
+	}
+	logicalExpression.push(element);
+	return logicalExpression;
+}
+
+void readTableAndColumnName(string& tableName,  string& columnName, string element) {
+	string name;
+	for (char character : element) {
+		if (character == '.') {
+			tableName = name;
+			name = "";
+		}
+		if (character != '.') name += character;
+		
+	}
+	columnName = name;
+	checkingTableName(tableName);
+}
+
+int32_t chekingColumnName(ifstream& fileTable, const string& columnName) {
+	unsigned char character;
+	string column;
+	int32_t columnNumber = 0;
+	do {
+		fileTable >> character;
+		if (character == ',' or character == '\n') {
+			columnNumber++;
+			if (column == columnName) return columnNumber;
+			column = "";
+		}
+		if (character != ',') column += character;
+	} while (character != '\n');
+	throw runtime_error("Incorrect column name");
+}
+
+string returnElementSearch(ifstream& fileTable, int32_t numberColumn, string& str) {
+	string column;
+	int32_t i = 1;
+	for (unsigned char character : str) {
+		if (character == ',' and i == numberColumn) {
+			return column;
+		}
+		else if (character == ',') {
+			column = "";
+			i++;
+		}
+		if (character != ',') column += character;
+	}
+}
+
+string elementSearch(ifstream& fileTable, int32_t primaryKey, const string& columnName) {
+	string str;
+	int32_t numberColumn;
+	for (int32_t i = 1; i <= primaryKey; i++) {
+		if (i == 1) {
+			numberColumn = chekingColumnName(fileTable, columnName);
+			getline(fileTable, str);
+		}
+		else if (i == primaryKey) return returnElementSearch(fileTable, numberColumn, str);
+		getline(fileTable, str);
+	}
+}
+
+void replaceElementData(string& element, int32_t primaryKey){
+	string tableName, columnName;
+	readTableAndColumnName(tableName, columnName, element);
+	int32_t numberFile = primaryKey / configuration.tuples_limits + 1;
+	ifstream fileTable(configuration.name + '\\' + tableName + '\\' + to_string(numberFile) + ".csv");//Поменять в Linux
+	checkTheFileOpening(fileTable);
+	element = elementSearch(fileTable, primaryKey, columnName);
+	fileTable.close();
+}
+
+void replaceDataFromTables(Vector<string>& logicalExpression, int32_t primaryKey) {
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		string& element = logicalExpression[i];
+		if (element == "=" or element == "AND" or element == "OR" or element[0] == '\'') continue;
+		else replaceElementData(element, primaryKey);
+	}
+}
+
+void replaceStrings(Vector<string>& logicalExpression) {
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		string& element = logicalExpression[i];
+		if (element[0] == '\'' and element[element.size() - 1] == '\'') {
+			erase(element, '\'');
+		}
+	}
+}
+
+void makeNewExpression(Vector<string>& logicalExpression, int32_t j, string value) {
+	Vector<string> newLogicalExpression;
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		if (i == j) newLogicalExpression.push(value);
+		else if (i == j + 1 or i == j - 1) continue;
+		else newLogicalExpression.push(logicalExpression[0]);
+	}
+	logicalExpression = newLogicalExpression;
+}
+
+void replaceExpressionWithComparison(Vector<string>& logicalExpression) {
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		if (logicalExpression[i] == "=" and i != 0 and i + 1 != logicalExpression.size()) {
+			if (logicalExpression[i - 1] == logicalExpression[i + 1]) makeNewExpression(logicalExpression, i, "true");
+			else makeNewExpression(logicalExpression, i, "false");
+		}
+	}
+}
+
+void replaceTheOrOperator(Vector<string>& logicalExpression) {
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		if (logicalExpression[i] == "OR" and i != 0 and i + 1 != logicalExpression.size()) {
+			if (logicalExpression[i - 1] == "false" and logicalExpression[i + 1] == "false")
+				makeNewExpression(logicalExpression, i, "false");
+			else makeNewExpression(logicalExpression, i, "true");
+		}
+	}
+}
+
+void replaceTheAndOperator(Vector<string>& logicalExpression) {
+	for (int32_t i = 0; i < logicalExpression.size(); i++) {
+		if (logicalExpression[i] == "AND" and i != 0 and i + 1 != logicalExpression.size()) {
+			if (logicalExpression[i - 1] == "true" and logicalExpression[i + 1] == "true")
+				makeNewExpression(logicalExpression, i, "true");
+			else makeNewExpression(logicalExpression, i, "false");
+		}
+	}
+}
+
+bool checkingResultOfSubstitutions(Vector<string>& logicalExpression) {
+	if (logicalExpression[0] == "true") return true;
+	if (logicalExpression[0] == "false") return false;
+}
+
+bool chekingCommandWhere() {
+	string inputCommand;
+	cin >> inputCommand;
+	if (inputCommand == "WHERE") return true;
+	else return false;
+}
+
+bool commandWhere(int32_t primaryKey, Vector<string> logicalExpression) {
+	replaceDataFromTables(logicalExpression, primaryKey);
+	replaceStrings(logicalExpression);
+	replaceExpressionWithComparison(logicalExpression);
+	replaceTheOrOperator(logicalExpression);
+	replaceTheAndOperator(logicalExpression);
+	bool returnValue = checkingResultOfSubstitutions(logicalExpression);
+	return returnValue;
+}
+
+void skipRow(ifstream& fileTable) {
+	unsigned char character;
+	do {
+		fileTable >> character;
+	} while (character != '\n');
+}
+
+Vector<string> writingRowToAnArray(ifstream& fileTable) {
+	Vector<string> row;
+	unsigned char character;
+	string element;
+	do {
+		fileTable >> character;
+		element += character;
+		if (character == ',' or character == '\n') {
+			row.push(element);
+			element = "";
+		}
+	} while (character != '\n');
+	return row;
+}
+
+void reducePrimaryKey(const string& tableName, int32_t primaryKey) {
+	ofstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	checkTheFileOpening(filePrimaryKey);
+	primaryKey--;
+	filePrimaryKey << primaryKey;
+	filePrimaryKey.close();
+}
+
+void deleteRow(int32_t primaryKey, const string& path) {//Удаление primary key
+	ofstream newFileTable(path + "copy");
+	ifstream fileTable(path);
+	checkTheFileOpening(fileTable);
+	checkTheFileOpening(newFileTable);
+	string str;
+	int32_t numberColumn = 0;
+	while (getline(fileTable, str)) {
+		numberColumn++;
+		if (numberColumn == primaryKey) continue;
+		else {
+			newFileTable << str;
+			newFileTable << '\n';
+		}
+	}
+	newFileTable.close();
+	fileTable.close();
+	if (filesystem::remove(path) != 1) throw runtime_error("Error remove file");
+	filesystem::rename(path + "copy", path);
+}
+
+void changingRows(const string& tableName, const string& path) {
+	int32_t primaryKey = readPrimaryKey(tableName);
+	if (!chekingCommandWhere()) throw runtime_error("Incorrect input command");
+	string str;
+	getline(cin, str);
+	for (int32_t i = primaryKey; i > 1; i--) {//и по всем строкам
+		Vector<string> logicalExpression = readLogicalExpression(str);
+		if (commandWhere(i, logicalExpression)) {
+			deleteRow(i, path);
+			reducePrimaryKey(tableName, primaryKey);
+		}
+	}
+}
+
+void сhangingFiles(const string& tableName) {
+	int32_t amountOfTableFiles = amountOfFilesInDir(tableName) - 2;
+	for (int32_t i = 1; i <= amountOfTableFiles; i++) {
+		string path = configuration.name + '\\' + tableName + '\\' + to_string(i) + ".csv";//Поменять на Linux
+		changingRows(tableName, path);
+	}
+}
+
+void commandDeleteFrom(string& inputCommand) {//Исправить WHERE
+	cin >> inputCommand;
+	if (inputCommand == "FROM") {
+		string tableName = readingTableName(inputCommand);
+		сhangingFiles(tableName);
+	}
+}
+
+void readColumnName(string& columnNames) {
+	string  str, tempstr, tableNames;
+	getline(cin, str);
+	for (unsigned char character : str) {//Переписать через поток
+		if (character == '.') {
+			tableNames += tempstr + ' ';
+			tempstr += ".";
+		}
+		else if (character == ',') {
+			columnNames += tempstr + ' ';
+			tempstr = "";
+		}
+		else if (character != ' ') tempstr += character;
+	}
+	columnNames += tempstr;
+}
+
+void readTableNames(string& tableNames) {
+	string tempstr, tempTableNames;
+	cin >> tempstr;
+	if (tempstr != "FROM") throw runtime_error("Incorrect input command");
+	tempstr = "";
+	getline(cin, tempTableNames);
+	istringstream tableNamesStream(tempTableNames);
+	while (tableNamesStream >> tempstr) {
+		if (tempstr[tempstr.size() - 1] == ',') tempstr.erase(tempstr.size() - 1, 1);
+		tableNames += tempstr + " ";
+	}
+}
+
+string readCurrentTableName(string tableNames) {
+	string currentTableName;
+	istringstream stringtableName(tableNames);
+	stringtableName >> currentTableName;
+	return currentTableName;
+}
+
+string cretaeNewTableNames(string tableNames, const string& tableName) {
+	tableNames.erase(0, tableName.size() + 1);
+	return tableNames;
+}
+
+string readCurrentColumnsNames(const string& columnNames, string currentTableName, string& newColumnNames) {
+	string currentColumnName, tableName, temp;
+	for (unsigned char character : columnNames) {//Переписать через поток
+		if (character == ' ') {
+			if (tableName == currentTableName) currentColumnName += temp + ' ';
+			else newColumnNames += tableName + "." + temp + " ";
+			temp = "";
+		}
+		if (character == '.') {
+			tableName = temp;
+			temp = "";
+		}
+		else temp += character;
+	}
+	if (tableName == currentTableName) currentColumnName += temp + ' ';
+	else newColumnNames += tableName + "." + temp;
+	if (newColumnNames[0] == ' ') newColumnNames.erase(0, 1);
+	return currentColumnName;
+}
+
+int32_t calculateAmountOfRepeatedRows(const string& tableNames) {
+	string tableName;
+	int32_t amountOfRepeatedRows = 1;
+	if (tableNames == "") return 1;
+	istringstream stringTablesaNames(tableNames);
+	while (stringTablesaNames >> tableName) {
+		int32_t primaryKey = readPrimaryKey(tableName);
+		amountOfRepeatedRows *= primaryKey - 1;
+	}
+	//if (amountOfRepeatedRows == 1) amountOfRepeatedRows += 1;//????
+	return amountOfRepeatedRows;
+}
+
+map<string, vector<string>> createHashforFind(const string& tableName, int32_t primaryKey) {
+	/*Hash<string> table;*/
+	map<string, vector<string>> table;
+	int32_t numberFile = primaryKey / 1001 + 1;
+	lockingTheTable(tableName);
+	ifstream tableFile(configuration.name + "\\" + tableName + "\\" + to_string(numberFile) + ".csv");//Заменить в линукс
+	checkTheFileOpening(tableFile);
+	string row;
+	int32_t currentPK = 1;
+	while (getline(tableFile, row)) {
+		string columnName;
+		istringstream rowStream(row);
+		while (getline(rowStream, columnName, ' ')) {
+			if (columnName[columnName.size() - 1] == ',') columnName.erase(columnName.size() - 1, 1);
+			/*table.HSET(to_string(currentPK), columnName);*/
+			table[to_string(currentPK)].push_back(columnName);
+		}
+		currentPK++;
+	}
+	tableFile.close();
+	unlockingTheTable(tableName);
+	return table;
+}
+
+string findElementInTable(const string& tableName, const string& columnName, int32_t primaryKey) {
+	/*Hash<string> table = createHashforFind(tableName, primaryKey);*/
+	map<string, vector<string>> table = createHashforFind(tableName, primaryKey);
+	int32_t numberColumn = -1;
+	/*for (int32_t i = 1; i <= table("1").size(); i++) {
+		if (table("1")[i] == columnName) {
+			numberColumn = i;
+			break;
+		}
+	}*/
+	for (int32_t i = 0; i < table["1"].size(); i++) {
+		if (table["1"][i] == columnName) {
+			numberColumn = i;
+			break;
+		}
+	}
+	if (numberColumn == -1) throw runtime_error("Error column name");
+	return table[to_string(primaryKey + 1)][numberColumn];//изменено
+}
+
+map<string, vector<string>> addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, map<string, vector<string>> intersectionOfTables, const string& tableName) {
+	istringstream columnNamesStream(columnNames);
+	string columnName;
+	int32_t maxPrimaryKey = readPrimaryKey(tableName) - 1;
+	if (findPrimaryKey > maxPrimaryKey) findPrimaryKey = findPrimaryKey - maxPrimaryKey;
+	while(columnNamesStream >> columnName) {
+		string value = findElementInTable(tableName, columnName, findPrimaryKey);
+		/*intersectionOfTables.HSET(to_string(currentPrimaryKey + 1), value);*/
+		intersectionOfTables[to_string(currentPrimaryKey + 1)].push_back(value);
+	}
+	return intersectionOfTables;
+}
+
+map<string, vector<string>> FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, map<string, vector<string>> intersectionOfTables, bool isFiltering, Vector<string> logicalExpression) {
+	if (tableNames == "") return intersectionOfTables;
+	string newColumnsNames;
+	string currentTableName = readCurrentTableName(tableNames);
+	string newTableNames = cretaeNewTableNames(tableNames, currentTableName);
+	string currentColumnsNames = readCurrentColumnsNames(columnNames, currentTableName, newColumnsNames);
+	int32_t AmountOfRepeatedRows = calculateAmountOfRepeatedRows(newTableNames);
+	int32_t primaryKey = readPrimaryKey(currentTableName);
+	int32_t amountOfRows = 0, currentPrimaryKey = 1, findPrimaryKey = 1;
+	while (amountOfRows < sharedPrimaryKey) {
+		for (int32_t i = 1; i < primaryKey; i++) {
+			for (int32_t j = 0; j < AmountOfRepeatedRows; j++) {
+				if (isFiltering and commandWhere(findPrimaryKey, logicalExpression)) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
+				if (isFiltering == false) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
+				currentPrimaryKey++;
+			}
+			if (primaryKey != 2) findPrimaryKey++;
+		}
+		if (primaryKey == 2) amountOfRows += 1;
+		else amountOfRows += AmountOfRepeatedRows * (primaryKey - 1);
+	}
+	if (amountOfRows > sharedPrimaryKey) sharedPrimaryKey = amountOfRows;
+	intersectionOfTables = FindIntersectionOfTables(newTableNames, newColumnsNames, sharedPrimaryKey, intersectionOfTables, isFiltering, logicalExpression);
+	return intersectionOfTables;
+}
+
+bool readInputDataForFiltering() {
+	cout << "Enter the Where command if you want to filter the values, or enter true to select" << endl;
+	if (!chekingCommandWhere()) return false;
+	return true;
+}
+
+
+
+void commandSelectFrom() {
+	string tableNames, columnNames;
+	/*Hash<string> intersectionOfTables;*/
+	map<string, vector<string>> intersectionOfTables;
+	readColumnName(columnNames);
+	readTableNames(tableNames);
+	int32_t sharedPrimaryKey = 1;
+	bool isFiltering = readInputDataForFiltering();
+	string inputStr;
+	getline(cin, inputStr);
+	Vector<string> logicalExpression = readLogicalExpression(inputStr);
+	intersectionOfTables = FindIntersectionOfTables(tableNames, columnNames, sharedPrimaryKey, intersectionOfTables, isFiltering, logicalExpression);
+	/*cout << sharedPrimaryKey;
+	intersectionOfTables.print(sharedPrimaryKey);*/
+	for (int32_t i = 1; i <= 10; i++) {//Вывод изменить
+		for (string a : intersectionOfTables[to_string(i)]) {
+			cout << a << "	";
+		}
+		cout << endl;
+	}
+}
+
+void handlingCommands() {
+	while (true) {
+		string inputCommand;
+		cin >> inputCommand;
+		if (inputCommand == "SELECT") commandSelectFrom();
+		else if (inputCommand == "INSERT") commandInsertInto(inputCommand);//Проверка на лишнии строки и заполнение нулями
+		else if (inputCommand == "DELETE") commandDeleteFrom(inputCommand);//Блокировка
+		else if (inputCommand == "EXIT") return;
+		else throw runtime_error("Incorrect command");
+	}
+}
+
+int main() {
+	setlocale(LC_ALL, "RUSSIAN");
+	try {
+		createDataBase();
+		handlingCommands();
+	}
+	catch (exception &e) {
+		cout << e.what();
+	}
+}
