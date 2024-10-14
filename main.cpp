@@ -1,19 +1,10 @@
-//Переименовать file - ConfFile, path
-//S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH
-// в Линуксе /, а не \
-//Hash таблицу улучшить
-//Сделать проверки на верные имена таблиц и коллонок
-//Заменить вектор
-
-#include <iostream>
+/#include <iostream>
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
 #include <filesystem>
 #include <cstdio>
 #include <algorithm>
-#include <vector>//удалить
-#include <map>//удалить
 
 //#include "HashTable.h"
 #include "Vector.h"
@@ -150,15 +141,15 @@ public:
 
 	void HDEL(std::string key) {
 		int32_t index = hashFunction(key);
-		arr[index].erase(0);//неправильно
+		arr[index].erase(0);
 		amountOfItems--;
 	}
 
-	/*T HGET(std::string key) {
+	T HGET(std::string key) {
 		int32_t index = hashFunction(key);
 		HList<T> tempList = arr[index];
 		return tempList.get(key);
-	}*/
+	}
 
 	void print(int32_t MaxPrimaryKey) {
 		for (int32_t i = 1; i < MaxPrimaryKey; i++) {
@@ -228,7 +219,7 @@ string readNameTable(ifstream& file, unsigned char& letter) {
 void WritingToFileNamesColumns(ifstream& file, ofstream& fileTable) {
 	unsigned char letter;
 	file >> letter;
-	while (true) {//Вынести в отдельную
+	while (true) {
 		string name;
 		while (letter != '"') {
 			name += letter;
@@ -250,7 +241,7 @@ void readNamesColumns(ifstream& file, ofstream& fileTable) {
 	file >> letter;
 	if (letter == '"') {
 		file >> letter;
-		while (true) {//Вынести в отдельную
+		while (true) {
 			string name;
 			while (letter != '"') {
 				name += letter;
@@ -268,7 +259,7 @@ void readNamesColumns(ifstream& file, ofstream& fileTable) {
 	}
 }
 
-void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& letter) {//Можно ли передавать без letter?Вроде да
+void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& letter) {
 	if (letter == '"') file >> letter;
 	if (letter == ':') file >> letter;
 	else throw runtime_error("Incorrect data in the \"structure\"");
@@ -439,7 +430,7 @@ string readingTableName(string& inputCommand) {
 }
 
 int32_t calculateAmountOfColumns(const string& tableName) {
-	string nameOfTableFile = configuration.name + '/' + tableName + '/' + "1.csv";//Поменять на Linux
+	string nameOfTableFile = configuration.name + '/' + tableName + '/' + "1.csv";
 	ifstream fileTable(nameOfTableFile);
 	checkTheFileOpening(fileTable);
 	string firstStr;
@@ -458,7 +449,7 @@ void insertingIntoTable(string& inputCommand) {
 	lockingTheTable(tableName);
 	cin >> inputCommand;
 	int32_t amountOfTableFiles = checkingTuplesLimit(tableName);
-	string nameOfTableFile = tableName + '/' + to_string(amountOfTableFiles) + ".csv";//Поменять на Linux
+	string nameOfTableFile = tableName + '/' + to_string(amountOfTableFiles) + ".csv";
 	int32_t amountOfColumns = calculateAmountOfColumns(tableName);
 	if (inputCommand == "VALUES") readInputValues(nameOfTableFile, amountOfColumns);
 	unlockingTheTable(tableName);
@@ -542,7 +533,7 @@ string elementSearch(ifstream& fileTable, int32_t primaryKey, const string& colu
 	}
 }
 
-void replaceElementData(string& element, int32_t primaryKey){//блокировка файла
+void replaceElementData(string& element, int32_t primaryKey){
 	string tableName, columnName;
 	readTableAndColumnName(tableName, columnName, element);
 	int32_t numberFile = primaryKey / configuration.tuples_limits + 1;
@@ -717,7 +708,7 @@ void commandDeleteFrom(string& inputCommand) {
 void readColumnName(string& columnNames) {
 	string  str, tempstr, tableNames;
 	getline(cin, str);
-	for (unsigned char character : str) {//Переписать через поток
+	for (unsigned char character : str) {
 		if (character == '.') {
 			tableNames += tempstr + ' ';
 			tempstr += ".";
@@ -758,7 +749,7 @@ string cretaeNewTableNames(string tableNames, const string& tableName) {
 
 string readCurrentColumnsNames(const string& columnNames, string currentTableName, string& newColumnNames) {
 	string currentColumnName, tableName, temp;
-	for (unsigned char character : columnNames) {//Переписать через поток
+	for (unsigned char character : columnNames) {
 		if (character == ' ') {
 			if (tableName == currentTableName) currentColumnName += temp + ' ';
 			else newColumnNames += tableName + "." + temp + " ";
@@ -785,17 +776,15 @@ int32_t calculateAmountOfRepeatedRows(const string& tableNames) {
 		int32_t primaryKey = readPrimaryKey(tableName);
 		amountOfRepeatedRows *= primaryKey - 1;
 	}
-	//if (amountOfRepeatedRows == 1) amountOfRepeatedRows += 1;//????
 	return amountOfRepeatedRows;
 }
 
-map<string, vector<string>> createHashforFind(const string& tableName, int32_t primaryKey) {
-	/*Hash<string> table;*/
-	map<string, vector<string>> table;
+Hash<string> createHashforFind(const string& tableName, int32_t primaryKey) {
+	Hash<string> table;
 	int32_t numberFile = primaryKey / 1001 + 1;
 	chekTheFileUnlock(tableName);
 	lockingTheTable(tableName);
-	ifstream tableFile(configuration.name + "/" + tableName + "/" + to_string(numberFile) + ".csv");//Заменить в линукс
+	ifstream tableFile(configuration.name + "/" + tableName + "/" + to_string(numberFile) + ".csv");
 	checkTheFileOpening(tableFile);
 	string row;
 	int32_t currentPK = 1;
@@ -804,8 +793,7 @@ map<string, vector<string>> createHashforFind(const string& tableName, int32_t p
 		istringstream rowStream(row);
 		while (getline(rowStream, columnName, ' ')) {
 			if (columnName[columnName.size() - 1] == ',') columnName.erase(columnName.size() - 1, 1);
-			/*table.HSET(to_string(currentPK), columnName);*/
-			table[to_string(currentPK)].push_back(columnName);
+			table.HSET(to_string(currentPK), columnName);
 		}
 		currentPK++;
 	}
@@ -815,39 +803,31 @@ map<string, vector<string>> createHashforFind(const string& tableName, int32_t p
 }
 
 string findElementInTable(const string& tableName, const string& columnName, int32_t primaryKey) {
-	/*Hash<string> table = createHashforFind(tableName, primaryKey);*/
-	map<string, vector<string>> table = createHashforFind(tableName, primaryKey);
+	Hash<string> table = createHashforFind(tableName, primaryKey);
 	int32_t numberColumn = -1;
-	/*for (int32_t i = 1; i <= table("1").size(); i++) {
+	for (int32_t i = 1; i <= table("1").size(); i++) {
 		if (table("1")[i] == columnName) {
-			numberColumn = i;
-			break;
-		}
-	}*/
-	for (int32_t i = 0; i < table["1"].size(); i++) {
-		if (table["1"][i] == columnName) {
 			numberColumn = i;
 			break;
 		}
 	}
 	if (numberColumn == -1) throw runtime_error("Error column name");
-	return table[to_string(primaryKey + 1)][numberColumn];//изменено
+	return table(to_string(primaryKey + 1))[numberColumn];
 }
 
-map<string, vector<string>> addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, map<string, vector<string>> intersectionOfTables, const string& tableName) {
+Hash<string> addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, Hash<string> intersectionOfTables, const string& tableName) {
 	istringstream columnNamesStream(columnNames);
 	string columnName;
 	int32_t maxPrimaryKey = readPrimaryKey(tableName) - 1;
 	if (findPrimaryKey > maxPrimaryKey) findPrimaryKey = findPrimaryKey - maxPrimaryKey;
 	while(columnNamesStream >> columnName) {
 		string value = findElementInTable(tableName, columnName, findPrimaryKey);
-		/*intersectionOfTables.HSET(to_string(currentPrimaryKey + 1), value);*/
-		intersectionOfTables[to_string(currentPrimaryKey + 1)].push_back(value);
+		intersectionOfTables.HSET(to_string(currentPrimaryKey + 1), value);
 	}
 	return intersectionOfTables;
 }
 
-map<string, vector<string>> FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, map<string, vector<string>> intersectionOfTables, bool isFiltering, const string& inputStr) {
+Hash<string> FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, Hash<string> intersectionOfTables, bool isFiltering, const string& inputStr) {
 	if (tableNames == "") return intersectionOfTables;
 	string newColumnsNames;
 	string currentTableName = readCurrentTableName(tableNames);
@@ -884,8 +864,7 @@ bool readInputDataForFiltering() {
 
 void commandSelectFrom() {
 	string tableNames, columnNames;
-	/*Hash<string> intersectionOfTables;*/
-	map<string, vector<string>> intersectionOfTables;
+	Hash<string> intersectionOfTables;
 	readColumnName(columnNames);
 	readTableNames(tableNames);
 	int32_t sharedPrimaryKey = 1;
@@ -893,14 +872,7 @@ void commandSelectFrom() {
 	string inputStr;
 	getline(cin, inputStr);
 	intersectionOfTables = FindIntersectionOfTables(tableNames, columnNames, sharedPrimaryKey, intersectionOfTables, isFiltering, inputStr);
-	/*cout << sharedPrimaryKey;
-	intersectionOfTables.print(sharedPrimaryKey);*/
-	for (int32_t i = 1; i <= 10; i++) {//Вывод изменить
-		for (string a : intersectionOfTables[to_string(i)]) {
-			cout << a << "	";
-		}
-		cout << endl;
-	}
+	intersectionOfTables.print(sharedPrimaryKey);
 }
 
 void handlingCommands() {
@@ -908,8 +880,8 @@ void handlingCommands() {
 		string inputCommand;
 		cin >> inputCommand;
 		if (inputCommand == "SELECT") commandSelectFrom();
-		else if (inputCommand == "INSERT") commandInsertInto(inputCommand);//Проверка на лишнии строки и заполнение нулями
-		else if (inputCommand == "DELETE") commandDeleteFrom(inputCommand);//Блокировка
+		else if (inputCommand == "INSERT") commandInsertInto(inputCommand);
+		else if (inputCommand == "DELETE") commandDeleteFrom(inputCommand);
 		else if (inputCommand == "EXIT") return;
 		else throw runtime_error("Incorrect command");
 	}
