@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <iostream>
 #include <string>
 
@@ -92,18 +94,14 @@ private:
 	int32_t amountOfItems = 0, capacity = 1000;
 
 	int32_t hashFunction(std::string key) {
-		const int32_t k = 41, mod = 1e9 + 9;
-		int64_t h = 0, m = 1;
-		for (unsigned char character : key) {
-			int32_t x = character - 'a' + 1;
-			h = (h + m * x) % mod;
-			m = (m * k) % mod;
-		}
-		return h % capacity;
+		key += "abcde123456789";
+		std::hash<std::string> index;
+		return index(key) % 1000;
 	}
 
 public:
 	Hash() {
+		head = nullptr;
 		for (int32_t i = 1; i <= capacity; i++) {
 			int32_t index = hashFunction(std::to_string(i));
 			mNode* newNode = new mNode(index);
@@ -138,18 +136,19 @@ public:
 	//	amountOfItems--;
 	//}
 
-	std::string HGET(std::string key, int32_t primaryKey) {
+	HList HGET(std::string key) {
 		int32_t index = hashFunction(key);
 		mNode* tempNode = head;
 		while (tempNode) {
 			if (tempNode->key == index) break;
 			tempNode = tempNode->next;
 		}
-		if (tempNode == nullptr) return NULL;
-		else return tempNode->list.get(primaryKey);
+		if (tempNode == nullptr) throw std::runtime_error("Error key");
+		else return tempNode->list;
 	}
 
 	void print() {
+		int32_t counter = 0;
 		for (int32_t i = 1; i <= capacity; i++) {
 			int32_t index = hashFunction(std::to_string(i));
 			mNode* tempNode = head;
@@ -157,13 +156,17 @@ public:
 				if (tempNode->key == index) break;
 				tempNode = tempNode->next;
 			}
-			if (tempNode == nullptr) continue;
+			if (tempNode->list.is_empty() or tempNode->list.size() <= 1) {
+				counter++;
+				continue;
+			}
+			else if (counter > 3) return;
 			else {
 				for (int32_t j = 0; j < tempNode->list.size(); j++) {
 					std::cout << tempNode->list.get(j) << "	";
 				}
+				std::cout << std::endl;
 			}
-			std::cout << std::endl;
 		}
 	}
 };
