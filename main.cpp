@@ -1,9 +1,5 @@
-//Переименовать file - ConfFile, path
 //S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH
 // в Линуксе /, а не \
-//Hash таблицу улучшить
-//Сделать проверки на верные имена таблиц и коллонок
-//Заменить вектор
 
 #include <iostream>
 #include <fstream>
@@ -17,7 +13,6 @@
 
 #include "HashTable.h"
 #include "List.h"
-#include "Vector.h"
 
 using namespace std;
 
@@ -494,21 +489,6 @@ void skipRow(ifstream& fileTable) {
 	} while (character != '\n');
 }
 
-Vector<string> writingRowToAnArray(ifstream& fileTable) {
-	Vector<string> row;
-	unsigned char character;
-	string element;
-	do {
-		fileTable >> character;
-		element += character;
-		if (character == ',' or character == '\n') {
-			row.push(element);
-			element = "";
-		}
-	} while (character != '\n');
-	return row;
-}
-
 void reducePrimaryKey(const string& tableName, int32_t primaryKey) {
 	ofstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
 	checkTheFileOpening(filePrimaryKey);
@@ -645,9 +625,8 @@ int32_t calculateAmountOfRepeatedRows(const string& tableNames) {
 	return amountOfRepeatedRows;
 }
 
-map<string, vector<string>> createHashforFind(const string& tableName, int32_t primaryKey) {
-	/*Hash<string> table;*/
-	map<string, vector<string>> table;
+Hash createHashforFind(const string& tableName, int32_t primaryKey) {
+	Hash table;
 	int32_t numberFile = primaryKey / 1001 + 1;
 	chekTheFileUnlock(tableName);
 	lockingTheTable(tableName);
@@ -660,8 +639,7 @@ map<string, vector<string>> createHashforFind(const string& tableName, int32_t p
 		istringstream rowStream(row);
 		while (getline(rowStream, columnName, ' ')) {
 			if (columnName[columnName.size() - 1] == ',') columnName.erase(columnName.size() - 1, 1);
-			/*table.HSET(to_string(currentPK), columnName);*/
-			table[to_string(currentPK)].push_back(columnName);
+			table.HSET(to_string(currentPK), columnName);
 		}
 		currentPK++;
 	}
@@ -671,23 +649,16 @@ map<string, vector<string>> createHashforFind(const string& tableName, int32_t p
 }
 
 string findElementInTable(const string& tableName, const string& columnName, int32_t primaryKey) {
-	/*Hash<string> table = createHashforFind(tableName, primaryKey);*/
-	map<string, vector<string>> table = createHashforFind(tableName, primaryKey);
+	Hash table = createHashforFind(tableName, primaryKey);
 	int32_t numberColumn = -1;
-	/*for (int32_t i = 1; i <= table("1").size(); i++) {
-		if (table("1")[i] == columnName) {
-			numberColumn = i;
-			break;
-		}
-	}*/
-	for (int32_t i = 0; i < table["1"].size(); i++) {
-		if (table["1"][i] == columnName) {
+	for (int32_t i = 0; i < table.HGET("1").size(); i++) {
+		if (table.HGET("1").get(i) == columnName) {
 			numberColumn = i;
 			break;
 		}
 	}
 	if (numberColumn == -1) throw runtime_error("Error column name");
-	return table[to_string(primaryKey + 1)][numberColumn];//изменено
+	return table.HGET(to_string(primaryKey + 1)).get(numberColumn);
 }
 
 Hash addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, Hash intersectionOfTables, const string& tableName) {
