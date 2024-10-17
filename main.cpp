@@ -1,15 +1,10 @@
-//S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH
-// в Линуксе /, а не \
-
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <sys/stat.h>//Linux
-#include <direct.h>//Windows
+#include <sys/stat.h>
 #include <filesystem>
 #include <cstdio>
-#include <map>//удалить
-#pragma warning(disable : 4996)//Windows
+#include <algorithm>
 
 #include "HashTable.h"
 #include "List.h"
@@ -32,7 +27,7 @@ void checkTheFileOpening(ofstream& file) {
 }
 
 void chekTheFileUnlock(const string& tableName) {
-	ifstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux изменить
+	ifstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");//Linux изменить
 	checkTheFileOpening(fileLockTable);
 	int32_t statusFile;
 	fileLockTable >> statusFile;
@@ -41,7 +36,7 @@ void chekTheFileUnlock(const string& tableName) {
 }
 
 void createMainDirectory(string& name) {
-	if (mkdir(name.c_str()) == -1) throw runtime_error("Error create a main directory");
+	if (mkdir(name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) throw runtime_error("Error create a main directory");
 }
 
 string readName(ifstream& file) {
@@ -122,7 +117,7 @@ void readNamesColumns(ifstream& file, ofstream& fileTable) {
 	}
 }
 
-void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& letter) {//Можно ли передавать без letter?Вроде да
+void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& letter) {
 	if (letter == '"') file >> letter;
 	if (letter == ':') file >> letter;
 	else throw runtime_error("Incorrect data in the \"structure\"");
@@ -130,21 +125,21 @@ void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& let
 }
 
 void createFileLockTable(const string& path, const string& nameTable) {
-	ofstream fileLockTable(path + '\\' + nameTable + "_lock");//В  линуксе поменять
+	ofstream fileLockTable(path + '/' + nameTable + "_lock");//В  линуксе поменять
 	if (fileLockTable.is_open()) fileLockTable << 0;
 	else throw runtime_error("Error create file <Table name>_lock");
 	fileLockTable.close();
 }
 
 void createFileForPrimaryKey(const string& path, const string& nameTable) {
-	ofstream filePrimaryKey(path + '\\' + nameTable + "_pk_sequence");
+	ofstream filePrimaryKey(path + '/' + nameTable + "_pk_sequence");
 	if (filePrimaryKey.is_open()) filePrimaryKey << 1;
 	else throw runtime_error("Error create file <Table name>_pk_sequence");
 	filePrimaryKey.close();
 }
 
 void createFilesTable(const string& path, const string& nameTable) {
-	if (mkdir(path.c_str()) == -1) throw runtime_error("Error create a directory");
+	if (mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) throw runtime_error("Error create a directory");
 	createFileLockTable(path, nameTable);
 	createFileForPrimaryKey(path, nameTable);
 }
@@ -156,9 +151,9 @@ void readStructure(ifstream& file) {
 	if (letter == '"') {
 		for (int32_t i = 1; true; i++) {
 			string nameTable = readNameTable(file, letter);//В линукс изменить
-			string path = configuration.name + '\\' + nameTable;
+			string path = configuration.name + '/' + nameTable;
 			createFilesTable(path, nameTable);
-			ofstream fileTable(path + '\\' + "1" + ".csv");
+			ofstream fileTable(path + '/' + "1" + ".csv");
 			if (fileTable.is_open()) {
 				readСolumnsOfTable(file, fileTable, letter);
 			}
@@ -172,11 +167,11 @@ void readStructure(ifstream& file) {
 }
 
 void readingConfiguration(ifstream& file) {
-	string str;//Изменить имя
-	while (file >> str) {
-		if (str == "\"name\":") configuration.name = readName(file);
-		if (str == "\"tuples_limit\":") configuration.tuples_limits = readTuplesLimits(file);
-		if (str == "\"structure\":") readStructure(file);
+	string inputStr;
+	while (file >> inputStr) {
+		if (inputStr == "\"name\":") configuration.name = readName(file);
+		if (inputStr == "\"tuples_limit\":") configuration.tuples_limits = readTuplesLimits(file);
+		if (inputStr == "\"structure\":") readStructure(file);
 	}
 }
 
@@ -191,33 +186,33 @@ void createDataBase() {
 
 bool checkingTableName(string& tableName) {
 	struct stat md;
-	string dir = configuration.name + "\\" + tableName;
+	string dir = configuration.name + '/' + tableName;
 	if (stat(dir.c_str(), &md) == 0) return true;
 	else throw runtime_error("Invalid table name");
 }
 
 void lockingTheTable(const string& tableName) {
-	ofstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux edit
+	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");//Linux edit
 	checkTheFileOpening(fileLockTable);
 	fileLockTable << 1;
 	fileLockTable.close();
 }
 
 void unlockingTheTable(const string& tableName) {
-	ofstream fileLockTable(configuration.name + '\\' + tableName + '\\' + tableName + "_lock");//Linux edit
+	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");//Linux edit
 	checkTheFileOpening(fileLockTable);
 	fileLockTable << 0;
 	fileLockTable.close();
 }
 
 int32_t amountOfFilesInDir(const string& tableName) {
-	auto dirIter = filesystem::directory_iterator(configuration.name + '\\' + tableName);
+	auto dirIter = filesystem::directory_iterator(configuration.name + '/' + tableName);
 	int32_t fileCount = count_if(begin(dirIter), end(dirIter), [](auto& entry) { return entry.is_regular_file(); });
 	return fileCount;
 }
 
 void updateFilePrimaryKey(const string& tableName, int32_t primaryKey) {
-	ofstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	ofstream filePrimaryKey(configuration.name + '/' + tableName + '/' + tableName + "_pk_sequence");
 	checkTheFileOpening(filePrimaryKey);
 	primaryKey++;
 	filePrimaryKey << primaryKey;
@@ -225,7 +220,7 @@ void updateFilePrimaryKey(const string& tableName, int32_t primaryKey) {
 }
 
 int32_t readPrimaryKey(const string& tableName) {
-	ifstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	ifstream filePrimaryKey(configuration.name + '/' + tableName + '/' + tableName + "_pk_sequence");
 	int32_t primaryKey;
 	checkTheFileOpening(filePrimaryKey);
 	filePrimaryKey >> primaryKey;
@@ -259,7 +254,7 @@ void addValuesToVector(unsigned char& character, List<string>& valuesForNewRow) 
 }
 
 void writeRowToFile(const string& nameOfTableFile, List<string> valuesForNewRow, int32_t amountOfColumns) {
-	ofstream tableFile(configuration.name + '\\' + nameOfTableFile, ios_base::app);//поменять / в линукс
+	ofstream tableFile(configuration.name + '/' + nameOfTableFile, ios_base::app);//поменять / в линукс
 	checkTheFileOpening(tableFile);
 	if (valuesForNewRow.size > amountOfColumns) throw runtime_error("Incorrect amount of input data");
 	for (int32_t i = 0; i < amountOfColumns; i++) {
@@ -291,7 +286,7 @@ string readingTableName(string& inputCommand) {
 }
 
 int32_t calculateAmountOfColumns(const string& tableName) {
-	string nameOfTableFile = configuration.name + '\\' + tableName + '\\' + "1.csv";//Поменять на Linux
+	string nameOfTableFile = configuration.name + '/' + tableName + '/' + "1.csv";//Поменять на Linux
 	ifstream fileTable(nameOfTableFile);
 	checkTheFileOpening(fileTable);
 	string firstStr;
@@ -310,7 +305,7 @@ void insertingIntoTable(string& inputCommand) {
 	lockingTheTable(tableName);
 	cin >> inputCommand;
 	int32_t amountOfTableFiles = checkingTuplesLimit(tableName);
-	string nameOfTableFile = tableName + '\\' + to_string(amountOfTableFiles) + ".csv";//Поменять на Linux
+	string nameOfTableFile = tableName + '/' + to_string(amountOfTableFiles) + ".csv";//Поменять на Linux
 	int32_t amountOfColumns = calculateAmountOfColumns(tableName);
 	if (inputCommand == "VALUES") readInputValues(nameOfTableFile, amountOfColumns);
 	unlockingTheTable(tableName);
@@ -322,7 +317,7 @@ void commandInsertInto(string& inputCommand) {
 	else throw runtime_error("Incorrect command");
 }
 
-List<string> readLogicalExpression(string str) {//изменено для where
+List<string> readLogicalExpression(string str) {
 	List<string> logicalExpression;
 	string element;
 	for (char character : str) {
@@ -394,11 +389,11 @@ string elementSearch(ifstream& fileTable, int32_t primaryKey, const string& colu
 	}
 }
 
-void replaceElementData(string& element, int32_t primaryKey){//блокировка файла
+void replaceElementData(string& element, int32_t primaryKey){
 	string tableName, columnName;
 	readTableAndColumnName(tableName, columnName, element);
 	int32_t numberFile = primaryKey / configuration.tuples_limits + 1;
-	ifstream fileTable(configuration.name + '\\' + tableName + '\\' + to_string(numberFile) + ".csv");//Поменять в Linux
+	ifstream fileTable(configuration.name + '/' + tableName + '/' + to_string(numberFile) + ".csv");//Поменять в Linux
 	checkTheFileOpening(fileTable);
 	element = elementSearch(fileTable, primaryKey, columnName);
 	fileTable.close();
@@ -416,7 +411,8 @@ void replaceStrings(List<string>& logicalExpression) {
 	for (int32_t i = 0; i < logicalExpression.size; i++) {
 		string& element = logicalExpression.get(i);
 		if (element[0] == '\'' and element[element.size() - 1] == '\'') {
-			erase(element, '\'');
+			element.erase(0, 1);
+            element.erase(element.size() - 1, 1);
 		}
 	}
 }
@@ -490,7 +486,7 @@ void skipRow(ifstream& fileTable) {
 }
 
 void reducePrimaryKey(const string& tableName, int32_t primaryKey) {
-	ofstream filePrimaryKey(configuration.name + '\\' + tableName + '\\' + tableName + "_pk_sequence");
+	ofstream filePrimaryKey(configuration.name + '/' + tableName + '/' + tableName + "_pk_sequence");
 	checkTheFileOpening(filePrimaryKey);
 	primaryKey--;
 	filePrimaryKey << primaryKey;
@@ -535,7 +531,7 @@ void changingRows(const string& tableName, const string& path) {
 void сhangingFiles(const string& tableName) {
 	int32_t amountOfTableFiles = amountOfFilesInDir(tableName) - 2;
 	for (int32_t i = 1; i <= amountOfTableFiles; i++) {
-		string path = configuration.name + '\\' + tableName + '\\' + to_string(i) + ".csv";//Поменять на Linux
+		string path = configuration.name + '/' + tableName + '/' + to_string(i) + ".csv";
 		lockingTheTable(tableName);
 		changingRows(tableName, path);
 		unlockingTheTable(tableName);
@@ -621,7 +617,6 @@ int32_t calculateAmountOfRepeatedRows(const string& tableNames) {
 		int32_t primaryKey = readPrimaryKey(tableName);
 		amountOfRepeatedRows *= primaryKey - 1;
 	}
-	//if (amountOfRepeatedRows == 1) amountOfRepeatedRows += 1;//????
 	return amountOfRepeatedRows;
 }
 
@@ -630,7 +625,7 @@ Hash createHashforFind(const string& tableName, int32_t primaryKey) {
 	int32_t numberFile = primaryKey / 1001 + 1;
 	chekTheFileUnlock(tableName);
 	lockingTheTable(tableName);
-	ifstream tableFile(configuration.name + "\\" + tableName + "\\" + to_string(numberFile) + ".csv");//Заменить в линукс
+	ifstream tableFile(configuration.name + "/" + tableName + "/" + to_string(numberFile) + ".csv");//Заменить в линукс
 	checkTheFileOpening(tableFile);
 	string row;
 	int32_t currentPK = 1;
@@ -727,8 +722,8 @@ void handlingCommands() {
 		string inputCommand;
 		cin >> inputCommand;
 		if (inputCommand == "SELECT") commandSelectFrom();
-		else if (inputCommand == "INSERT") commandInsertInto(inputCommand);//Проверка на лишнии строки и заполнение нулями
-		else if (inputCommand == "DELETE") commandDeleteFrom(inputCommand);//Блокировка
+		else if (inputCommand == "INSERT") commandInsertInto(inputCommand);
+		else if (inputCommand == "DELETE") commandDeleteFrom(inputCommand);
 		else if (inputCommand == "EXIT") return;
 		else throw runtime_error("Incorrect command");
 	}
