@@ -1,3 +1,10 @@
+//Переименовать file - ConfFile, path
+//S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH
+// в Линуксе /, а не \
+//Hash таблицу улучшить
+//Сделать проверки на верные имена таблиц и коллонок
+//Заменить вектор
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -10,6 +17,7 @@
 
 #include "HashTable.h"
 #include "List.h"
+#include "Vector.h"
 
 using namespace std;
 
@@ -682,20 +690,19 @@ string findElementInTable(const string& tableName, const string& columnName, int
 	return table[to_string(primaryKey + 1)][numberColumn];//изменено
 }
 
-map<string, vector<string>> addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, map<string, vector<string>> intersectionOfTables, const string& tableName) {
+Hash addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const string& columnNames, Hash intersectionOfTables, const string& tableName) {
 	istringstream columnNamesStream(columnNames);
 	string columnName;
 	int32_t maxPrimaryKey = readPrimaryKey(tableName) - 1;
 	if (findPrimaryKey > maxPrimaryKey) findPrimaryKey = findPrimaryKey - maxPrimaryKey;
 	while(columnNamesStream >> columnName) {
 		string value = findElementInTable(tableName, columnName, findPrimaryKey);
-		/*intersectionOfTables.HSET(to_string(currentPrimaryKey + 1), value);*/
-		intersectionOfTables[to_string(currentPrimaryKey + 1)].push_back(value);
+		intersectionOfTables.HSET(to_string(currentPrimaryKey + 1), value);
 	}
 	return intersectionOfTables;
 }
 
-map<string, vector<string>> FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, map<string, vector<string>> intersectionOfTables, bool isFiltering, const string& inputStr) {
+Hash FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, Hash intersectionOfTables, bool isFiltering, const string& inputStr) {
 	if (tableNames == "") return intersectionOfTables;
 	string newColumnsNames;
 	string currentTableName = readCurrentTableName(tableNames);
@@ -708,7 +715,7 @@ map<string, vector<string>> FindIntersectionOfTables(string tableNames, string c
 		for (int32_t i = 1; i < primaryKey; i++) {
 			for (int32_t j = 0; j < AmountOfRepeatedRows; j++) {
 				List<string> logicalExpression = readLogicalExpression(inputStr);
-				if (isFiltering and intersectionOfTables[to_string(currentPrimaryKey)].size() > 1) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);//Добавлено
+				if (isFiltering and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() > 1) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);//Добавлено
 				else if (isFiltering and commandWhere(findPrimaryKey + 1, logicalExpression)) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				else if (isFiltering == false) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				currentPrimaryKey++;
@@ -733,8 +740,7 @@ bool readInputDataForFiltering() {
 
 void commandSelectFrom() {
 	string tableNames, columnNames;
-	/*Hash<string> intersectionOfTables;*/
-	map<string, vector<string>> intersectionOfTables;
+	Hash intersectionOfTables;
 	readColumnName(columnNames);
 	readTableNames(tableNames);
 	int32_t sharedPrimaryKey = 1;
@@ -742,16 +748,7 @@ void commandSelectFrom() {
 	string inputStr;
 	getline(cin, inputStr);
 	intersectionOfTables = FindIntersectionOfTables(tableNames, columnNames, sharedPrimaryKey, intersectionOfTables, isFiltering, inputStr);
-	/*cout << sharedPrimaryKey;
-	intersectionOfTables.print(sharedPrimaryKey);*/
-	for (int32_t i = 1; i <= 10; i++) {//Вывод изменить
-		if (intersectionOfTables[to_string(i)].size() > 1 ) {
-			for (string a : intersectionOfTables[to_string(i)]) {
-				cout << a << "	";
-			}
-			cout << endl;
-		}
-	}
+	intersectionOfTables.print();
 }
 
 void handlingCommands() {
