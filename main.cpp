@@ -77,7 +77,7 @@ string readNameTable(ifstream& file, unsigned char& letter) {
 void WritingToFileNamesColumns(ifstream& file, ofstream& fileTable) {
 	unsigned char letter;
 	file >> letter;
-	while (true) {//Вынести в отдельную
+	while (true) {
 		string name;
 		while (letter != '"') {
 			name += letter;
@@ -99,7 +99,7 @@ void readNamesColumns(ifstream& file, ofstream& fileTable) {
 	file >> letter;
 	if (letter == '"') {
 		file >> letter;
-		while (true) {//Вынести в отдельную
+		while (true) {
 			string name;
 			while (letter != '"') {
 				name += letter;
@@ -125,7 +125,7 @@ void readСolumnsOfTable(ifstream& file, ofstream& fileTable, unsigned char& let
 }
 
 void createFileLockTable(const string& path, const string& nameTable) {
-	ofstream fileLockTable(path + '/' + nameTable + "_lock");//В  линуксе поменять
+	ofstream fileLockTable(path + '/' + nameTable + "_lock");
 	if (fileLockTable.is_open()) fileLockTable << 0;
 	else throw runtime_error("Error create file <Table name>_lock");
 	fileLockTable.close();
@@ -150,7 +150,7 @@ void readStructure(ifstream& file) {
 	if (letter == '{') file >> letter;
 	if (letter == '"') {
 		for (int32_t i = 1; true; i++) {
-			string nameTable = readNameTable(file, letter);//В линукс изменить
+			string nameTable = readNameTable(file, letter);
 			string path = configuration.name + '/' + nameTable;
 			createFilesTable(path, nameTable);
 			ofstream fileTable(path + '/' + "1" + ".csv");
@@ -192,14 +192,14 @@ bool checkingTableName(string& tableName) {
 }
 
 void lockingTheTable(const string& tableName) {
-	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");//Linux edit
+	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");
 	checkTheFileOpening(fileLockTable);
 	fileLockTable << 1;
 	fileLockTable.close();
 }
 
 void unlockingTheTable(const string& tableName) {
-	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");//Linux edit
+	ofstream fileLockTable(configuration.name + '/' + tableName + '/' + tableName + "_lock");
 	checkTheFileOpening(fileLockTable);
 	fileLockTable << 0;
 	fileLockTable.close();
@@ -254,7 +254,7 @@ void addValuesToVector(unsigned char& character, List<string>& valuesForNewRow) 
 }
 
 void writeRowToFile(const string& nameOfTableFile, List<string> valuesForNewRow, int32_t amountOfColumns) {
-	ofstream tableFile(configuration.name + '/' + nameOfTableFile, ios_base::app);//поменять / в линукс
+	ofstream tableFile(configuration.name + '/' + nameOfTableFile, ios_base::app);
 	checkTheFileOpening(tableFile);
 	if (valuesForNewRow.size > amountOfColumns) throw runtime_error("Incorrect amount of input data");
 	for (int32_t i = 0; i < amountOfColumns; i++) {
@@ -286,7 +286,7 @@ string readingTableName(string& inputCommand) {
 }
 
 int32_t calculateAmountOfColumns(const string& tableName) {
-	string nameOfTableFile = configuration.name + '/' + tableName + '/' + "1.csv";//Поменять на Linux
+	string nameOfTableFile = configuration.name + '/' + tableName + '/' + "1.csv";
 	ifstream fileTable(nameOfTableFile);
 	checkTheFileOpening(fileTable);
 	string firstStr;
@@ -305,7 +305,7 @@ void insertingIntoTable(string& inputCommand) {
 	lockingTheTable(tableName);
 	cin >> inputCommand;
 	int32_t amountOfTableFiles = checkingTuplesLimit(tableName);
-	string nameOfTableFile = tableName + '/' + to_string(amountOfTableFiles) + ".csv";//Поменять на Linux
+	string nameOfTableFile = tableName + '/' + to_string(amountOfTableFiles) + ".csv";
 	int32_t amountOfColumns = calculateAmountOfColumns(tableName);
 	if (inputCommand == "VALUES") readInputValues(nameOfTableFile, amountOfColumns);
 	unlockingTheTable(tableName);
@@ -347,17 +347,15 @@ void readTableAndColumnName(string& tableName,  string& columnName, string eleme
 
 int32_t chekingColumnName(ifstream& fileTable, const string& columnName) {
 	unsigned char character;
-	string column;
-	int32_t columnNumber = 0;
-	do {
-		fileTable >> character;
-		if (character == ',' or character == '\n') {
-			columnNumber++;
-			if (column == columnName) return columnNumber;
-			column = "";
-		}
-		if (character != ',') column += character;
-	} while (character != '\n');
+	string column, row;
+	int32_t columnNumber = 1;
+	getline(fileTable, row);
+	istringstream rowStream(row);
+	while (getline(rowStream, column, ' ')) {
+		if (column[column.size() - 1] == ',') column.erase(column.size() - 1, 1);
+		if (column == columnName) return columnNumber;
+		columnNumber++;
+	}
 	throw runtime_error("Incorrect column name");
 }
 
@@ -379,13 +377,15 @@ string returnElementSearch(ifstream& fileTable, int32_t numberColumn, string& st
 string elementSearch(ifstream& fileTable, int32_t primaryKey, const string& columnName) {
 	string str;
 	int32_t numberColumn;
-	for (int32_t i = 1; i <= primaryKey; i++) {
+	for (int32_t i = 1; i <= primaryKey; i++) {	
 		if (i == 1) {
 			numberColumn = chekingColumnName(fileTable, columnName);
 			getline(fileTable, str);
 		}
+		else if (primaryKey == 2) return returnElementSearch(fileTable, numberColumn, str);
+		else if (i == 2) getline(fileTable, str);
 		else if (i == primaryKey) return returnElementSearch(fileTable, numberColumn, str);
-		getline(fileTable, str);
+		if (i > 2) getline(fileTable, str);
 	}
 }
 
@@ -393,9 +393,10 @@ void replaceElementData(string& element, int32_t primaryKey){
 	string tableName, columnName;
 	readTableAndColumnName(tableName, columnName, element);
 	int32_t numberFile = primaryKey / configuration.tuples_limits + 1;
-	ifstream fileTable(configuration.name + '/' + tableName + '/' + to_string(numberFile) + ".csv");//Поменять в Linux
+	ifstream fileTable(configuration.name + '/' + tableName + '/' + to_string(numberFile) + ".csv");
 	checkTheFileOpening(fileTable);
 	element = elementSearch(fileTable, primaryKey, columnName);
+	if (element[0] == ' ') element.erase(0, 1);
 	fileTable.close();
 }
 
@@ -549,7 +550,7 @@ void commandDeleteFrom(string& inputCommand) {
 void readColumnName(string& columnNames) {
 	string  str, tempstr, tableNames;
 	getline(cin, str);
-	for (unsigned char character : str) {//Переписать через поток
+	for (unsigned char character : str) {
 		if (character == '.') {
 			tableNames += tempstr + ' ';
 			tempstr += ".";
@@ -590,7 +591,7 @@ string cretaeNewTableNames(string tableNames, const string& tableName) {
 
 string readCurrentColumnsNames(const string& columnNames, string currentTableName, string& newColumnNames) {
 	string currentColumnName, tableName, temp;
-	for (unsigned char character : columnNames) {//Переписать через поток
+	for (unsigned char character : columnNames) {
 		if (character == ' ') {
 			if (tableName == currentTableName) currentColumnName += temp + ' ';
 			else newColumnNames += tableName + "." + temp + " ";
@@ -625,7 +626,7 @@ Hash createHashforFind(const string& tableName, int32_t primaryKey) {
 	int32_t numberFile = primaryKey / 1001 + 1;
 	chekTheFileUnlock(tableName);
 	lockingTheTable(tableName);
-	ifstream tableFile(configuration.name + "/" + tableName + "/" + to_string(numberFile) + ".csv");//Заменить в линукс
+	ifstream tableFile(configuration.name + "/" + tableName + "/" + to_string(numberFile) + ".csv");
 	checkTheFileOpening(tableFile);
 	string row;
 	int32_t currentPK = 1;
@@ -681,7 +682,7 @@ Hash FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sh
 		for (int32_t i = 1; i < primaryKey; i++) {
 			for (int32_t j = 0; j < AmountOfRepeatedRows; j++) {
 				List<string> logicalExpression = readLogicalExpression(inputStr);
-				if (isFiltering and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() > 1) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);//Добавлено
+				if (isFiltering and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() > 1) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				else if (isFiltering and commandWhere(findPrimaryKey + 1, logicalExpression)) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				else if (isFiltering == false) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				currentPrimaryKey++;
