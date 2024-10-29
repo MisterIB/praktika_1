@@ -589,11 +589,14 @@ string cretaeNewTableNames(string tableNames, const string& tableName) {
 	return tableNames;
 }
 
-string readCurrentColumnsNames(const string& columnNames, string currentTableName, string& newColumnNames) {
+string readCurrentColumnsNames(const string& columnNames, string currentTableName, string& newColumnNames, int32_t amountOfColumn) {
 	string currentColumnName, tableName, temp;
 	for (unsigned char character : columnNames) {
 		if (character == ' ') {
-			if (tableName == currentTableName) currentColumnName += temp + ' ';
+			if (tableName == currentTableName) {
+				currentColumnName += temp + ' ';
+				amountOfColumn++;
+		}
 			else newColumnNames += tableName + "." + temp + " ";
 			temp = "";
 		}
@@ -603,7 +606,11 @@ string readCurrentColumnsNames(const string& columnNames, string currentTableNam
 		}
 		else temp += character;
 	}
-	if (tableName == currentTableName) currentColumnName += temp + ' ';
+	if (tableName[0] == ' ') tableName.erase(0, 1);
+	if (tableName == currentTableName) {
+		currentColumnName += temp + ' ';
+		amountOfColumn++;
+	}
 	else newColumnNames += tableName + "." + temp;
 	if (newColumnNames[0] == ' ') newColumnNames.erase(0, 1);
 	return currentColumnName;
@@ -672,9 +679,10 @@ Hash addValueToHash(int32_t findPrimaryKey, int32_t currentPrimaryKey, const str
 Hash FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sharedPrimaryKey, Hash intersectionOfTables, bool isFiltering, const string& inputStr) {
 	if (tableNames == "") return intersectionOfTables;
 	string newColumnsNames;
+	int32_t amountOfColumn = 0;
 	string currentTableName = readCurrentTableName(tableNames);
 	string newTableNames = cretaeNewTableNames(tableNames, currentTableName);
-	string currentColumnsNames = readCurrentColumnsNames(columnNames, currentTableName, newColumnsNames);
+	string currentColumnsNames = readCurrentColumnsNames(columnNames, currentTableName, newColumnsNames, amountOfColumn);
 	int32_t AmountOfRepeatedRows = calculateAmountOfRepeatedRows(newTableNames);
 	int32_t primaryKey = readPrimaryKey(currentTableName);
 	int32_t amountOfRows = 0, currentPrimaryKey = 1, findPrimaryKey = 1;
@@ -682,7 +690,7 @@ Hash FindIntersectionOfTables(string tableNames, string columnNames, int32_t& sh
 		for (int32_t i = 1; i < primaryKey; i++) {
 			for (int32_t j = 0; j < AmountOfRepeatedRows; j++) {
 				List<string> logicalExpression = readLogicalExpression(inputStr);
-				if (isFiltering and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() > 1) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
+				if (isFiltering and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() > 1 and intersectionOfTables.HGET(to_string(currentPrimaryKey)).size() < amountOfColumn) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				else if (isFiltering and commandWhere(findPrimaryKey + 1, logicalExpression)) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				else if (isFiltering == false) intersectionOfTables = addValueToHash(findPrimaryKey, currentPrimaryKey, currentColumnsNames, intersectionOfTables, currentTableName);
 				currentPrimaryKey++;
